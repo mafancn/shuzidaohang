@@ -283,7 +283,11 @@ $page_title = $site_title.(!empty($conf['title']) ? ' - '.$conf['title'] : '');
 <title><?php echo htmlspecialchars($page_title); ?></title>
 <meta name="keywords"    content="<?php echo htmlspecialchars(isset($conf['keywords']) ? (string)$conf['keywords'] : '', ENT_QUOTES, 'UTF-8'); ?>">
 <meta name="description" content="<?php echo htmlspecialchars($conf['description']); ?>">
-<link rel="shortcut icon" href="favicon.ico">
+<link rel="icon" href="favicon.ico?v=2" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192x192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1a3254">
 <?php if($bg_mode=='default'){ ?>
 <link rel="preload" as="image" href="<?php echo htmlspecialchars($default_bg_webp); ?>" type="image/webp" fetchpriority="high">
 <?php } ?>
