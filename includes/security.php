@@ -108,6 +108,141 @@ function qifu_admin_logout_session(){
     qifu_csrf_token();
 }
 
+if(!defined('QIFU_ADMIN_REMEMBER_LIFETIME')) define('QIFU_ADMIN_REMEMBER_LIFETIME', 2592000);
+
+function qifu_admin_remember_cookie_name(){
+    return 'qifu_admin_remember';
+}
+
+function qifu_admin_remember_cookie_path(){
+    $root = isset($GLOBALS['rootpath']) ? (string)$GLOBALS['rootpath'] : '/';
+    $admin = isset($GLOBALS['admin_directory']) ? (string)$GLOBALS['admin_directory'] : 'admin';
+    $admin = trim(str_replace('\\', '/', $admin), '/');
+    $path = rtrim($root, '/').'/'.($admin === '' ? '' : $admin.'/');
+    return $path === '//' ? '/' : $path;
+}
+
+function qifu_admin_remember_set_cookie($value, $expires){
+    if(headers_sent()) return;
+    setcookie(qifu_admin_remember_cookie_name(), (string)$value, array(
+        'expires'=>intval($expires),
+        'path'=>qifu_admin_remember_cookie_path(),
+        'secure'=>qifu_is_https(),
+        'httponly'=>true,
+        'samesite'=>'Lax'
+    ));
+}
+
+function qifu_admin_remember_clear_cookie(){
+    qifu_admin_remember_set_cookie('', time() - 3600);
+    unset($_COOKIE[qifu_admin_remember_cookie_name()]);
+}
+
+function qifu_admin_remember_ensure_table(){
+    global $DB;
+    static $ensured = false;
+    if($ensured) return true;
+    if($DB->get_row("SHOW TABLES LIKE 'web_admin_tokens'")){
+        $ensured = true;
+        return true;
+    }
+    if(defined('SQLITE')){
+        $DB->query("CREATE TABLE IF NOT EXISTS web_admin_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, selector TEXT NOT NULL UNIQUE, validator_hash TEXT NOT NULL, username TEXT NOT NULL, auth_version INTEGER NOT NULL DEFAULT 0, expires INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL DEFAULT 0, last_used INTEGER NOT NULL DEFAULT 0)");
+    }else{
+        $DB->query("CREATE TABLE IF NOT EXISTS `web_admin_tokens` (`id` int(11) NOT NULL AUTO_INCREMENT,`selector` char(32) NOT NULL,`validator_hash` char(64) NOT NULL,`username` varchar(191) NOT NULL,`auth_version` int(11) NOT NULL DEFAULT 0,`expires` int(11) NOT NULL DEFAULT 0,`created` int(11) NOT NULL DEFAULT 0,`last_used` int(11) NOT NULL DEFAULT 0,PRIMARY KEY (`id`),UNIQUE KEY `selector` (`selector`),KEY `expires` (`expires`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+    $ensured = (bool)$DB->get_row("SHOW TABLES LIKE 'web_admin_tokens'");
+    return $ensured;
+}
+
+function qifu_admin_remember_parse_cookie(){
+    $name = qifu_admin_remember_cookie_name();
+    if(!isset($_COOKIE[$name]) || !is_string($_COOKIE[$name])) return null;
+    if(!preg_match('/^([a-f0-9]{32}):([a-f0-9]{64})$/D', $_COOKIE[$name], $matches)) return null;
+    return array('selector'=>$matches[1], 'validator'=>$matches[2]);
+}
+
+function qifu_admin_remember_prune(){
+    global $DB;
+    if(!qifu_admin_remember_ensure_table()) return;
+    $DB->prepared_query('DELETE FROM web_admin_tokens WHERE expires < ?', array(time()));
+}
+
+function qifu_admin_remember_issue($username){
+    global $DB;
+    $username = (string)$username;
+    if($username === '' || !qifu_admin_remember_ensure_table()) return false;
+    qifu_admin_remember_revoke_current(false);
+    qifu_admin_remember_prune();
+    try {
+        $selector = bin2hex(random_bytes(16));
+        $validator = bin2hex(random_bytes(32));
+    } catch(Exception $e) {
+        return false;
+    }
+    $now = time();
+    $expires = $now + QIFU_ADMIN_REMEMBER_LIFETIME;
+    $ok = $DB->prepared_query(
+        'INSERT INTO web_admin_tokens (selector,validator_hash,username,auth_version,expires,created,last_used) VALUES (?,?,?,?,?,?,?)',
+        array($selector, hash('sha256', $validator), $username, qifu_auth_version(), $expires, $now, $now)
+    );
+    if(!$ok) return false;
+    $cookie_value = $selector.':'.$validator;
+    qifu_admin_remember_set_cookie($cookie_value, $expires);
+    $_COOKIE[qifu_admin_remember_cookie_name()] = $cookie_value;
+    return true;
+}
+
+function qifu_admin_remember_validate(){
+    global $DB, $conf;
+    $parsed = qifu_admin_remember_parse_cookie();
+    if(!$parsed || !qifu_admin_remember_ensure_table()) return false;
+    $row = $DB->prepared_row('SELECT username,validator_hash,auth_version,expires FROM web_admin_tokens WHERE selector=? LIMIT 1', array($parsed['selector']));
+    if(!$row){
+        qifu_admin_remember_clear_cookie();
+        return false;
+    }
+    $current_user = isset($conf['admin_user']) ? (string)$conf['admin_user'] : '';
+    $valid = intval($row['expires']) >= time()
+        && intval($row['auth_version']) === qifu_auth_version()
+        && hash_equals((string)$row['username'], $current_user)
+        && hash_equals((string)$row['validator_hash'], hash('sha256', $parsed['validator']));
+    if(!$valid){
+        $DB->prepared_query('DELETE FROM web_admin_tokens WHERE selector=?', array($parsed['selector']));
+        qifu_admin_remember_clear_cookie();
+        return false;
+    }
+    $now = time();
+    $expires = $now + QIFU_ADMIN_REMEMBER_LIFETIME;
+    $DB->prepared_query('UPDATE web_admin_tokens SET last_used=?, expires=? WHERE selector=?', array($now, $expires, $parsed['selector']));
+    qifu_admin_remember_set_cookie($parsed['selector'].':'.$parsed['validator'], $expires);
+    return $current_user;
+}
+
+function qifu_admin_remember_login(){
+    $username = qifu_admin_remember_validate();
+    if($username === false || $username === '') return false;
+    qifu_admin_login_session($username);
+    return true;
+}
+
+function qifu_admin_remember_revoke_current($clear_cookie = true){
+    global $DB;
+    $parsed = qifu_admin_remember_parse_cookie();
+    if($parsed && qifu_admin_remember_ensure_table()){
+        $DB->prepared_query('DELETE FROM web_admin_tokens WHERE selector=?', array($parsed['selector']));
+    }
+    if($clear_cookie) qifu_admin_remember_clear_cookie();
+}
+
+function qifu_admin_remember_revoke_all(){
+    global $DB;
+    if(qifu_admin_remember_ensure_table()){
+        $DB->query('DELETE FROM web_admin_tokens');
+    }
+    qifu_admin_remember_clear_cookie();
+}
+
 function qifu_csrf_token(){
     if(empty($_SESSION['qifu_csrf']) || !is_string($_SESSION['qifu_csrf'])){
         $token = isset($_COOKIE['qifu_csrf']) && is_string($_COOKIE['qifu_csrf']) && preg_match('/^[a-f0-9]{64}$/D', $_COOKIE['qifu_csrf'])

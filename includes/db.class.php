@@ -12,6 +12,7 @@ function qifu_db_query_allowed($query){
 	if(preg_match('/;\s*\S/s', rtrim($query, ';'))) return false;
 	if(defined('QIFU_ALLOW_RUNTIME_DDL') && QIFU_ALLOW_RUNTIME_DDL) return true;
 	if(preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`?web_login_attempts`?/i', $query)) return true;
+	if(preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`?web_admin_tokens`?/i', $query)) return true;
 	if(preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`?(web_stats|web_daily_visitors)`?/i', $query)) return true;
 	if(preg_match('/^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+`?web_backup`?/i', $query)) return true;
 	if(preg_match('/^CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?`?web_site_stats`?/i', $query)) return true;

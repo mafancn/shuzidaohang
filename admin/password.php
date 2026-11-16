@@ -31,6 +31,7 @@ if($_SERVER['REQUEST_METHOD']=='POST'){
         saveSetting('admin_auth_version', qifu_auth_version() + 1);
         $CACHE->clear();
         writeLog('修改', '账号安全', 0, '管理员更新登录账号和密码');
+        qifu_admin_remember_revoke_all();
         qifu_admin_logout_session();
         header('Location: ./login.php?changed=1');
         exit;

@@ -9,6 +9,7 @@ $login_site_name = isset($conf['sitename']) && trim($conf['sitename']) !== '' ? 
 
 if($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'logout'){
     qifu_require_csrf();
+    qifu_admin_remember_revoke_current();
     qifu_admin_logout_session();
     setcookie('admin_token', '', array('expires'=>time()-3600,'path'=>'/','secure'=>qifu_is_https(),'httponly'=>true,'samesite'=>'Strict'));
     $islogin = 0;
@@ -24,6 +25,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['a
         qifu_login_rate_clear($user);
         qifu_admin_password_migrate($pass);
         qifu_admin_login_session($user);
+        qifu_admin_remember_issue($user);
         $login_notice_type = 'success';
         $login_notice_title = '登录成功';
         $login_notice_message = '验证通过，正在进入后台。';

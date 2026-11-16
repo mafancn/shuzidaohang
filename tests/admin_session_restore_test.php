@@ -13,6 +13,9 @@ $guard = file_get_contents($root.'admin-ui-source/src/router/guards/beforeEach.t
 $app = file_get_contents($root.'admin-ui-source/src/App.vue');
 $common = file_get_contents($root.'includes/common.php');
 $member = file_get_contents($root.'includes/member.php');
+$security = file_get_contents($root.'includes/security.php');
+$userStore = file_get_contents($root.'admin-ui-source/src/store/modules/user.ts');
+$loginView = file_get_contents($root.'admin-ui-source/src/views/auth/login/index.vue');
 $failures = array();
 
 function check_session_restore($condition, $message){
@@ -35,6 +38,14 @@ check_session_restore(strpos($common, "'qifu-sessions-'") !== false && strpos($c
 check_session_restore(strpos($member, 'time() - $last_seen <= $session_idle_timeout') !== false && strpos($member, '<= 7200') === false, 'administrator activity still expires after two hours');
 check_session_restore(strpos($app, 'SESSION_HEARTBEAT_INTERVAL = 5 * 60 * 1000') !== false, 'visible administrator pages do not renew the server session');
 check_session_restore(strpos($app, 'document.visibilityState') !== false && strpos($app, 'await fetchSessionStatus()') !== false, 'session heartbeat is not visibility-aware');
+check_session_restore(strpos($security, "define('QIFU_ADMIN_REMEMBER_LIFETIME', 2592000)") !== false, '30-day remember-login lifetime is missing');
+check_session_restore(strpos($security, 'function qifu_admin_remember_login()') !== false, 'remember-login session restore helper is missing');
+check_session_restore(strpos($member, 'qifu_admin_remember_login()') !== false, 'admin bootstrap does not restore a remember-login session');
+check_session_restore(strpos($api, 'qifu_admin_remember_issue($username)') !== false, 'login endpoint does not issue a remember-login token');
+check_session_restore(strpos($api, 'qifu_admin_remember_revoke_current()') !== false, 'logout endpoint does not revoke the remember-login token');
+check_session_restore(strpos($userStore, "fetch('./api.php?action=logout'") !== false, 'frontend logout does not call the backend logout endpoint');
+check_session_restore(strpos($loginView, 'remember: formData.rememberPassword') !== false, 'login form does not send the remember-login option');
+check_session_restore(strpos($loginView, 'rememberPassword: true') !== false, 'remember-login option is not enabled by default');
 
 if($failures){
     fwrite(STDERR, "Admin session restore tests failed:\n- ".implode("\n- ", $failures)."\n");

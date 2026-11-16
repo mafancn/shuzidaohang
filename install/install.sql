@@ -270,3 +270,18 @@ create table `web_login_attempts` (
 `locked_until` int(11) NOT NULL DEFAULT 0,
 PRIMARY KEY (`identity_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS `web_admin_tokens`;
+create table `web_admin_tokens` (
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`selector` char(32) NOT NULL,
+`validator_hash` char(64) NOT NULL,
+`username` varchar(191) NOT NULL,
+`auth_version` int(11) NOT NULL DEFAULT 0,
+`expires` int(11) NOT NULL DEFAULT 0,
+`created` int(11) NOT NULL DEFAULT 0,
+`last_used` int(11) NOT NULL DEFAULT 0,
+PRIMARY KEY (`id`),
+UNIQUE KEY `selector` (`selector`),
+KEY `expires` (`expires`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

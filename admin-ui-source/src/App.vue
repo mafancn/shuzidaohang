@@ -41,7 +41,7 @@
     sessionHeartbeatRunning = true
     try {
       const session = await fetchSessionStatus()
-      if (!session.authenticated && userStore.isLogin) userStore.logOut()
+      if (!session.authenticated && userStore.isLogin) userStore.logOut(false)
     } catch {
       // A temporary network failure must not clear an otherwise valid local login state.
     } finally {

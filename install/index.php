@@ -1186,6 +1186,7 @@ $table_groups = array(
 	array('web_site_stats / web_stats', '访问统计与日访问数据'),
 	array('web_log / web_backup', '操作日志与备份数据'),
 	array('web_login_attempts', '登录防护与安全数据'),
+	array('web_admin_tokens', '后台免登录令牌'),
 );
 $install_success = $e == 0;
 if($install_success) $_SESSION['qifu_install_ready'] = true;

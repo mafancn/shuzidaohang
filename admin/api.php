@@ -354,6 +354,11 @@ if($action === 'login'){
     qifu_require_csrf();
     $username = trim(isset($_POST['userName']) ? (string)$_POST['userName'] : (string)@$_POST['user']);
     $password = isset($_POST['password']) ? (string)$_POST['password'] : (string)@$_POST['pass'];
+    $remember = true;
+    if(isset($_POST['remember'])){
+        $remember_raw = $_POST['remember'];
+        $remember = !($remember_raw === false || $remember_raw === 0 || $remember_raw === '0' || $remember_raw === 'false' || $remember_raw === 'off');
+    }
     $wait = qifu_login_rate_wait($username);
     if($wait > 0 || !qifu_admin_credentials_verify($username, $password)){
         if($wait <= 0) qifu_login_rate_fail($username);
@@ -362,6 +367,8 @@ if($action === 'login'){
     qifu_login_rate_clear($username);
     qifu_admin_password_migrate($password);
     qifu_admin_login_session($username);
+    if($remember) qifu_admin_remember_issue($username);
+    else qifu_admin_remember_revoke_current();
     saveSetting('admin_last_login_at', (string)time());
     saveSetting('admin_last_login_ip', real_ip());
     writeLog('登录','后台',0,'管理员登录后台');
@@ -372,6 +379,7 @@ if($action === 'login'){
 
 if($action === 'logout'){
     qifu_api_require_write();
+    qifu_admin_remember_revoke_current();
     qifu_admin_logout_session();
     qifu_api_exit(array(), '已退出登录');
 }
@@ -764,6 +772,7 @@ if($action === 'backup_restore'){
     try {
         $result = qifu_backup_restore_file($DB, (string)$file['tmp_name']);
         $CACHE->clear();
+        if(function_exists('qifu_admin_remember_revoke_all')) qifu_admin_remember_revoke_all();
         writeLog('恢复','数据库',0,'完整恢复 '.$result['tableCount'].' 张表、'.$result['rowCount'].' 条记录');
         qifu_api_exit($result,'数据恢复完成');
     } catch(Throwable $error) {
@@ -778,7 +787,7 @@ if($action === 'backup_delete'){
 }
 
 if($action === 'password_change'){
-    qifu_api_require_write(); $old=(string)@$_POST['oldpwd']; $username=trim((string)@$_POST['username']); $new1=(string)@$_POST['newpwd']; $new2=(string)@$_POST['newpwd2']; if(!$old||!$username||!$new1||!$new2) qifu_api_exit(array(),'请完整填写账号和密码',400); if(!qifu_username_valid($username)||!qifu_password_valid($new1)) qifu_api_exit(array(),'账号或密码格式不符合安全策略',400); if($new1!==$new2) qifu_api_exit(array(),'两次输入的新密码不一致',400); if(!qifu_admin_password_verify($old)) qifu_api_exit(array(),'原密码错误',400); saveSetting('admin_user',$username); saveSetting('admin_pwd_hash',password_hash($new1,PASSWORD_DEFAULT)); saveSetting('admin_pwd',''); saveSetting('admin_password_changed_at',(string)time()); saveSetting('admin_auth_version',qifu_auth_version()+1); $CACHE->clear(); writeLog('修改','账号安全',0,'Art Design Pro 后台更新登录凭据'); qifu_admin_logout_session(); qifu_api_exit(array('loggedOut'=>true),'账号安全设置已更新');
+    qifu_api_require_write(); $old=(string)@$_POST['oldpwd']; $username=trim((string)@$_POST['username']); $new1=(string)@$_POST['newpwd']; $new2=(string)@$_POST['newpwd2']; if(!$old||!$username||!$new1||!$new2) qifu_api_exit(array(),'请完整填写账号和密码',400); if(!qifu_username_valid($username)||!qifu_password_valid($new1)) qifu_api_exit(array(),'账号或密码格式不符合安全策略',400); if($new1!==$new2) qifu_api_exit(array(),'两次输入的新密码不一致',400); if(!qifu_admin_password_verify($old)) qifu_api_exit(array(),'原密码错误',400); saveSetting('admin_user',$username); saveSetting('admin_pwd_hash',password_hash($new1,PASSWORD_DEFAULT)); saveSetting('admin_pwd',''); saveSetting('admin_password_changed_at',(string)time()); saveSetting('admin_auth_version',qifu_auth_version()+1); $CACHE->clear(); writeLog('修改','账号安全',0,'Art Design Pro 后台更新登录凭据'); qifu_admin_remember_revoke_all(); qifu_admin_logout_session(); qifu_api_exit(array('loggedOut'=>true),'账号安全设置已更新');
 }
 
 qifu_api_exit(array(),'未知接口操作',404);

@@ -23,4 +23,14 @@ if(!empty($_SESSION['qifu_admin_auth'])){
 		qifu_admin_logout_session();
 	}
 }
+
+// 会话过期或浏览器重启后，用 30 天有效的“记住登录”令牌恢复后台登录态。
+if($islogin !== 1 && function_exists('qifu_admin_remember_login')){
+	$qifu_admin_request = function_exists('qifu_admin_request_is_admin')
+		? qifu_admin_request_is_admin(isset($_SERVER['SCRIPT_NAME']) ? $_SERVER['SCRIPT_NAME'] : '', defined('ROOT') ? ROOT : null, isset($admin_directory) ? $admin_directory : null)
+		: false;
+	if($qifu_admin_request && qifu_admin_remember_login()){
+		$islogin = 1;
+	}
+}
 ?>

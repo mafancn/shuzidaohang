@@ -136,11 +136,43 @@ export const useUserStore = defineStore(
     }
 
     /**
+     * 主动通知服务端吊销当前登录会话和 30 天免登录令牌。
+     * 不依赖 axios，避免与 HTTP 拦截器形成循环依赖。
+     */
+    const revokeServerSession = async () => {
+      try {
+        const csrfResponse = await fetch('./api.php?action=csrf', {
+          credentials: 'same-origin',
+          cache: 'no-store'
+        })
+        const csrfJson = await csrfResponse.json()
+        const csrf = csrfJson?.data?.csrf || csrfJson?.csrf || ''
+        await fetch('./api.php?action=logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          keepalive: true,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+          },
+          body: '{}'
+        })
+      } catch {
+        // 网络异常时仍然完成本地退出，服务端会话由超时机制兜底。
+      }
+    }
+
+    /**
      * 退出登录
      * 清空所有用户相关状态并跳转到登录页
      * 如果是同一账号重新登录，保留工作台标签页
      */
-    const logOut = () => {
+    const logOut = (revokeRemote = true) => {
+      if (revokeRemote) {
+        void revokeServerSession()
+      }
+
       // 保存当前用户 ID，用于下次登录时判断是否为同一用户
       const currentUserId = info.value.userId
       if (currentUserId) {

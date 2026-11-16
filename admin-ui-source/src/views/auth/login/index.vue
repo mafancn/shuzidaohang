@@ -32,7 +32,7 @@
               :rules="rules"
               :key="formKey"
               @keyup.enter="handleSubmit"
-              autocomplete="off"
+              autocomplete="on"
               class="login-form"
             >
               <ElFormItem prop="username">
@@ -40,7 +40,7 @@
                   class="custom-height"
                   :placeholder="$t('login.placeholder.username')"
                   v-model.trim="formData.username"
-                  autocomplete="off"
+                  autocomplete="username"
                 >
                   <template #prefix>
                     <ArtSvgIcon icon="ri:user-3-line" class="input-icon" />
@@ -53,7 +53,7 @@
                   :placeholder="$t('login.placeholder.password')"
                   v-model.trim="formData.password"
                   type="password"
-                  autocomplete="new-password"
+                  autocomplete="current-password"
                   show-password
                 >
                   <template #prefix>
@@ -145,7 +145,7 @@
   const formData = reactive({
     username: '',
     password: '',
-    rememberPassword: false
+    rememberPassword: true
   })
 
   const rules = computed<FormRules>(() => ({
@@ -178,7 +178,8 @@
 
       const { token, refreshToken, user } = await fetchLogin({
         userName: username,
-        password
+        password,
+        remember: formData.rememberPassword
       })
 
       // 验证token

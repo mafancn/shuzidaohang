@@ -130,7 +130,7 @@ function resetUnauthorizedError() {
 /** 退出登录函数 */
 function logOut() {
   setTimeout(() => {
-    useUserStore().logOut()
+    useUserStore().logOut(false)
   }, LOGOUT_DELAY)
 }
 
