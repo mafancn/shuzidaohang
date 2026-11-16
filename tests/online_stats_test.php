@@ -48,6 +48,50 @@ check_online_stats($real['today_active'] >= 1, 'real active visitor count did no
 check_online_stats($real['ip'] === '198.51.100.42', 'displayed visitor IP is incorrect');
 $DB->link->rollBack();
 
+$original_forwarded = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : null;
+$original_real_ip = isset($_SERVER['HTTP_X_REAL_IP']) ? $_SERVER['HTTP_X_REAL_IP'] : null;
+$original_user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : null;
+$original_stats_cookie = isset($_COOKIE['qifu_stats_vid']) ? $_COOKIE['qifu_stats_vid'] : null;
+
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.77, 127.0.0.1';
+check_online_stats(real_ip() === '198.51.100.77', 'real_ip did not use the forwarded address from a local proxy');
+
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '9.9.9.9, 198.51.100.77';
+check_online_stats(real_ip() === '198.51.100.77', 'real_ip trusted a spoofed X-Forwarded-For prefix');
+
+$_SERVER['HTTP_X_REAL_IP'] = '198.51.100.78';
+check_online_stats(real_ip() === '198.51.100.78', 'real_ip did not prefer X-Real-IP over X-Forwarded-For');
+
+unset($_SERVER['HTTP_X_REAL_IP']);
+$_SERVER['REMOTE_ADDR'] = '198.51.100.42';
+check_online_stats(real_ip() === '198.51.100.42', 'real_ip trusted proxy headers from a direct public client');
+
+$_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.42';
+unset($_COOKIE['qifu_stats_vid']);
+$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Test A)';
+$hash_a = qifu_online_stats_visitor_hash($today, 'test-secret');
+$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 (Test B)';
+$hash_b = qifu_online_stats_visitor_hash($today, 'test-secret');
+check_online_stats($hash_a !== $hash_b, 'visitor hash did not distinguish different browsers behind one IP');
+check_online_stats(strpos($hash_a, '198.51.100.42') === false, 'visitor hash exposed the raw IP');
+
+$_COOKIE['qifu_stats_vid'] = str_repeat('a', 32);
+$cookie_hash_a = qifu_online_stats_visitor_hash($today, 'test-secret');
+$_SERVER['HTTP_X_FORWARDED_FOR'] = '198.51.100.77';
+$cookie_hash_b = qifu_online_stats_visitor_hash($today, 'test-secret');
+check_online_stats($cookie_hash_a === $cookie_hash_b, 'visitor identity changed when the IP changed for the same cookie');
+$_COOKIE['qifu_stats_vid'] = str_repeat('b', 32);
+$cookie_hash_c = qifu_online_stats_visitor_hash($today, 'test-secret');
+check_online_stats($cookie_hash_a !== $cookie_hash_c, 'different visitor cookies produced the same hash');
+unset($_COOKIE['qifu_stats_vid']);
+qifu_online_stats_ensure_visitor_cookie();
+check_online_stats(isset($_COOKIE['qifu_stats_vid']) && preg_match('/^[a-f0-9]{32}$/D', $_COOKIE['qifu_stats_vid']), 'anonymous visitor cookie was not issued');
+
+$_SERVER['REMOTE_ADDR'] = '198.51.100.42';
+unset($_SERVER['HTTP_X_FORWARDED_FOR']);
+
 $random_a = qifu_online_stats_random_snapshot();
 $random_b = qifu_online_stats_random_snapshot();
 check_online_stats($random_a === $random_b, 'random mode changed within the same day');
@@ -99,6 +143,14 @@ check_online_stats(strpos($front_source, '您的 IP') !== false, 'online stats I
 
 if($original_ip === null) unset($_SERVER['REMOTE_ADDR']);
 else $_SERVER['REMOTE_ADDR'] = $original_ip;
+if($original_forwarded === null) unset($_SERVER['HTTP_X_FORWARDED_FOR']);
+else $_SERVER['HTTP_X_FORWARDED_FOR'] = $original_forwarded;
+if($original_real_ip === null) unset($_SERVER['HTTP_X_REAL_IP']);
+else $_SERVER['HTTP_X_REAL_IP'] = $original_real_ip;
+if($original_user_agent === null) unset($_SERVER['HTTP_USER_AGENT']);
+else $_SERVER['HTTP_USER_AGENT'] = $original_user_agent;
+if($original_stats_cookie === null) unset($_COOKIE['qifu_stats_vid']);
+else $_COOKIE['qifu_stats_vid'] = $original_stats_cookie;
 
 if($failures){
     fwrite(STDERR, "Online stats tests failed:\n- ".implode("\n- ", $failures)."\n");

@@ -43,14 +43,54 @@ function get_curl($url,$post=0,$referer=0,$cookie=0,$header=0,$ua=0,$nobaody=0){
 	curl_close($ch);
 	return $ret;
 }
+function qifu_ip_normalize($value){
+	$value = trim((string)$value, " \t\n\r\0\x0B\"'");
+	if($value === '') return '';
+	if($value[0] === '['){
+		$close = strpos($value, ']');
+		if($close !== false) $value = substr($value, 1, $close - 1);
+	}elseif(preg_match('/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/D', $value, $match)){
+		$value = $match[1];
+	}
+	$zone = strpos($value, '%');
+	if($zone !== false) $value = substr($value, 0, $zone);
+	return filter_var($value, FILTER_VALIDATE_IP) ? $value : '';
+}
+function qifu_ip_is_public($ip){
+	return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+}
+function qifu_ip_is_loopback($ip){
+	if($ip === '0.0.0.0' || $ip === '::') return true;
+	if(strpos($ip, ':') === false) return (bool)preg_match('/^127\./', $ip);
+	return $ip === '::1';
+}
+function qifu_ip_from_proxy_headers(){
+	$headers = array('HTTP_CF_CONNECTING_IP','HTTP_TRUE_CLIENT_IP','HTTP_X_REAL_IP','HTTP_X_FORWARDED_FOR');
+	$fallback = '';
+	foreach($headers as $header){
+		$value = isset($_SERVER[$header]) ? $_SERVER[$header] : '';
+		if(!is_string($value) || $value === '') continue;
+		$candidates = explode(',', $value);
+		// X-Forwarded-For 可能包含客户端伪造的前缀；最右侧才是可信代理看到的地址。
+		if($header === 'HTTP_X_FORWARDED_FOR') $candidates = array_reverse($candidates);
+		foreach($candidates as $candidate){
+			$ip = qifu_ip_normalize($candidate);
+			if($ip === '') continue;
+			if(qifu_ip_is_public($ip)) return $ip;
+			if($fallback === '' && !qifu_ip_is_loopback($ip)) $fallback = $ip;
+		}
+	}
+	return $fallback;
+}
 function real_ip(){
-	$remote = isset($_SERVER['REMOTE_ADDR']) ? (string)$_SERVER['REMOTE_ADDR'] : '0.0.0.0';
-	if(!filter_var($remote, FILTER_VALIDATE_IP)) return '0.0.0.0';
-	if(!defined('QIFU_TRUST_PROXY') || !QIFU_TRUST_PROXY) return $remote;
-	$forwarded = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']) : array();
-	foreach($forwarded as $candidate){
-		$candidate = trim($candidate);
-		if(filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) return $candidate;
+	$remote = qifu_ip_normalize(isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '');
+	if($remote === '') return '0.0.0.0';
+	// 本机/内网反向代理（nginx、frp、cloudflared 等）会以 127.0.0.1 或内网地址
+	// 连接 PHP，此时以 X-Forwarded-For / X-Real-IP 等转发头为准。
+	$trust_proxy = defined('QIFU_TRUST_PROXY') && QIFU_TRUST_PROXY;
+	if($trust_proxy || !qifu_ip_is_public($remote)){
+		$forwarded = qifu_ip_from_proxy_headers();
+		if($forwarded !== '') return $forwarded;
 	}
 	return $remote;
 }

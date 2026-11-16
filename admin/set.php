@@ -904,7 +904,7 @@ include __DIR__.'/head.php';
             </div>
             <div class="alert alert-info" style="margin:4px 0 16px;">
               <span class="glyphicon glyphicon-info-sign"></span>
-              真实数据按日期匿名去重访客 IP，并读取站点操作日志与页面浏览量；随机数据每天保持稳定，不会随刷新跳变。
+              真实数据按日期通过匿名访客标识（Cookie）去重，并读取站点操作日志与页面浏览量；随机数据每天保持稳定，不会随刷新跳变。
             </div>
             <?php if(isset($online_stats_feedback)): ?>
             <div class="alert alert-success" role="status" style="margin:0 0 16px;">

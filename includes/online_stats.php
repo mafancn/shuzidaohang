@@ -23,13 +23,54 @@ function qifu_online_stats_ensure_tables(){
     }
 }
 
+function qifu_online_stats_visitor_cookie_id(){
+    if(!isset($_COOKIE['qifu_stats_vid']) || !is_string($_COOKIE['qifu_stats_vid'])) return '';
+    $value = strtolower(trim($_COOKIE['qifu_stats_vid']));
+    return preg_match('/^[a-f0-9]{32}$/D', $value) ? $value : '';
+}
+
+function qifu_online_stats_ensure_visitor_cookie(){
+    if(qifu_online_stats_visitor_cookie_id() !== '') return;
+    try {
+        $value = bin2hex(random_bytes(16));
+    } catch (Exception $e) {
+        $value = md5(uniqid('', true));
+    }
+    if(!headers_sent()){
+        $https = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && intval($_SERVER['SERVER_PORT']) === 443)
+            || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower(trim((string)$_SERVER['HTTP_X_FORWARDED_PROTO'])) === 'https');
+        setcookie('qifu_stats_vid', $value, array(
+            'expires' => time() + 31536000,
+            'path' => '/',
+            'secure' => $https,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ));
+    }
+    $_COOKIE['qifu_stats_vid'] = $value;
+}
+
+function qifu_online_stats_visitor_hash($today, $secret){
+    $visitor_id = qifu_online_stats_visitor_cookie_id();
+    if($visitor_id !== ''){
+        // Cookie 匿名标识不受 NAT、反向代理和出口 IP 变化影响。
+        return hash_hmac('sha256', $today.'|vid|'.$visitor_id, $secret);
+    }
+    $user_agent = isset($_SERVER['HTTP_USER_AGENT']) && is_string($_SERVER['HTTP_USER_AGENT'])
+        ? substr($_SERVER['HTTP_USER_AGENT'], 0, 255)
+        : '';
+    return hash_hmac('sha256', $today.'|ip|'.real_ip().'|ua|'.$user_agent, $secret);
+}
+
 function qifu_online_stats_track_visit(){
     global $DB, $conf;
     qifu_online_stats_ensure_tables();
     $today = date('Y-m-d');
     $now = time();
     $secret = !empty($conf['cron_key']) ? (string)$conf['cron_key'] : (defined('SYS_KEY') ? SYS_KEY : 'qifu');
-    $visitor_hash = hash_hmac('sha256', $today.'|'.real_ip(), $secret);
+    qifu_online_stats_ensure_visitor_cookie();
+    $visitor_hash = qifu_online_stats_visitor_hash($today, $secret);
 
     if(defined('SQLITE')){
         $DB->prepared_query('INSERT INTO web_stats (stat_date,views,unique_visitors) VALUES (?,?,0) ON CONFLICT(stat_date) DO UPDATE SET views=views+1', array($today,1));
