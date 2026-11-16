@@ -8,7 +8,7 @@ if($islogin != 1){
     exit;
 }
 
-$official_site = defined('QIFU_OFFICIAL_SITE') ? QIFU_OFFICIAL_SITE : 'https://github.com/JiangXinMao/qifudaohang';
+$official_site = defined('QIFU_OFFICIAL_SITE') ? QIFU_OFFICIAL_SITE : 'https://40086.cn/';
 $about_product_title = QIFU_PRODUCT_NAME;
 if($about_product_title === '') $about_product_title = QIFU_PRODUCT_NAME;
 include __DIR__.'/head.php';
