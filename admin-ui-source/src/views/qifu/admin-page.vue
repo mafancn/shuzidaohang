@@ -1305,7 +1305,7 @@
           <div class="system-project-links" aria-label="项目入口">
             <a
               class="system-project-link"
-              href="https://github.com/JiangXinMao/qifudaohang"
+              href="https://github.com/mafancn/shuzidaohang"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -1313,13 +1313,13 @@
                 ><ArtSvgIcon icon="ri:github-fill" />
               </span>
               <span class="system-project-link-copy"
-                ><b>开源地址</b><small>JiangXinMao/qifudaohang</small></span
+                ><b>开源地址</b><small>mafancn/shuzidaohang</small></span
               >
               <ElIcon class="system-project-link-arrow" aria-hidden="true"><Link /></ElIcon>
             </a>
             <a
               class="system-project-link"
-              href="https://api.jiangxinmao.com"
+              href="https://40086.cn/"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -1327,11 +1327,7 @@
                 ><ElIcon><Monitor /></ElIcon
               ></span>
               <span class="system-project-link-copy"
-                ><b>匠心猫AI <ElTag size="small" type="info" effect="plain">20xpro</ElTag></b
-                ><small>api.jiangxinmao.com · 低至 0.1 Pro</small>
-                <span class="system-project-link-features" aria-label="支持接入">
-                  <i>Codex</i><i>GPT</i><i>Claude</i>
-                </span></span
+                ><b>数字导航</b><small>https://40086.cn/</small></span
               >
               <ElIcon class="system-project-link-arrow" aria-hidden="true"><Link /></ElIcon>
             </a>
