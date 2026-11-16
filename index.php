@@ -365,7 +365,12 @@ body{font-family:'Noto Sans SC',sans-serif;min-height:100vh;min-height:100dvh;ov
 .ico .site-favicon.is-loaded{opacity:1;transform:scale(1)}
 .ico .site-favicon.is-failed{display:none}
 .inf{overflow:hidden;flex:1;min-width:0}
-.nm{font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+.nm{font-size:1rem;font-weight:600;white-space:nowrap;overflow:hidden;color:#fff}
+.nm .nm-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.nm.marquee{text-overflow:clip}
+.nm.marquee .nm-text{display:inline-block;max-width:none;min-width:100%;padding-left:100%;animation:nameMarquee var(--name-speed,8s) linear infinite}
+.card:hover .nm.marquee .nm-text{animation-play-state:paused}
+@keyframes nameMarquee{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
 .ds{font-size:13px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px;font-weight:400;line-height:18px;height:18px;max-width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
 .ds .ds-text{display:inline-block;max-width:100%;vertical-align:top;font-size:inherit;line-height:inherit}
 .ds:not(.marquee) .ds-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -723,7 +728,7 @@ body{font-family:'Noto Sans SC',sans-serif;min-height:100vh;min-height:100dvh;ov
           <?php endif; ?>
         </div>
         <div class="inf">
-          <div class="nm"><?php echo $name; ?></div>
+          <div class="nm" title="<?php echo $name; ?>"><span class="nm-text"><?php echo $name; ?></span></div>
           <div class="<?php echo $desc_classes; ?>"<?php echo $desc_style; ?>><span class="ds-text"><?php echo $show_desc; ?></span></div>
         </div>
       </a>
@@ -1112,8 +1117,35 @@ function filterLocalSites(query,scrollToResults){
     else{state.className='site-search-state show'+(count===0?' empty':'');state.textContent=count===0?'未找到匹配的本站资源':'找到 '+count+' 个本站资源';}
   }
   if(scrollToResults&&normalized&&state)state.scrollIntoView({behavior:'smooth',block:'center'});
+  if(window.qifuScheduleNameMarquee)window.qifuScheduleNameMarquee();
   return count;
 }
+(function(){
+  var timer=0;
+  function initNameMarquee(){
+    document.querySelectorAll('.card .nm').forEach(function(nm){
+      nm.classList.remove('marquee');
+      nm.style.removeProperty('--name-speed');
+      var text=nm.querySelector('.nm-text');
+      if(!text)return;
+      var available=nm.clientWidth;
+      if(!available)return;
+      var width=text.scrollWidth;
+      if(width>available+1){
+        var duration=Math.max(7,Math.min(24,Math.round((width+available)/32)));
+        nm.style.setProperty('--name-speed',duration+'s');
+        nm.classList.add('marquee');
+      }
+    });
+  }
+  window.qifuInitNameMarquee=initNameMarquee;
+  function schedule(){if(timer)clearTimeout(timer);timer=setTimeout(initNameMarquee,120);}
+  window.qifuScheduleNameMarquee=schedule;
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initNameMarquee);}else{initNameMarquee();}
+  window.addEventListener('load',initNameMarquee);
+  window.addEventListener('resize',schedule);
+  if(document.fonts&&document.fonts.ready){document.fonts.ready.then(initNameMarquee).catch(function(){});}
+})();
 function doSearch(){
   var input=document.getElementById('sinp'),eng=document.getElementById('eng');
   if(!input||!eng)return;
