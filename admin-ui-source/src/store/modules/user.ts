@@ -140,10 +140,13 @@ export const useUserStore = defineStore(
      * 不依赖 axios，避免与 HTTP 拦截器形成循环依赖。
      */
     const revokeServerSession = async () => {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3000)
       try {
         const csrfResponse = await fetch('./api.php?action=csrf', {
           credentials: 'same-origin',
-          cache: 'no-store'
+          cache: 'no-store',
+          signal: controller.signal
         })
         const csrfJson = await csrfResponse.json()
         const csrf = csrfJson?.data?.csrf || csrfJson?.csrf || ''
@@ -152,6 +155,7 @@ export const useUserStore = defineStore(
           credentials: 'same-origin',
           cache: 'no-store',
           keepalive: true,
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             ...(csrf ? { 'X-CSRF-Token': csrf } : {})
@@ -160,6 +164,8 @@ export const useUserStore = defineStore(
         })
       } catch {
         // 网络异常时仍然完成本地退出，服务端会话由超时机制兜底。
+      } finally {
+        clearTimeout(timer)
       }
     }
 
@@ -168,9 +174,9 @@ export const useUserStore = defineStore(
      * 清空所有用户相关状态并跳转到登录页
      * 如果是同一账号重新登录，保留工作台标签页
      */
-    const logOut = (revokeRemote = true) => {
+    const logOut = async (revokeRemote = true) => {
       if (revokeRemote) {
-        void revokeServerSession()
+        await revokeServerSession()
       }
 
       // 保存当前用户 ID，用于下次登录时判断是否为同一用户
