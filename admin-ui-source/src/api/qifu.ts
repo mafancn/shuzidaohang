@@ -330,3 +330,30 @@ export async function qifuUpload(file: File, slot: string, position: string, csr
   if (json.code !== 200) throw new Error(json.msg || '上传失败')
   return json.data as { url: string; width?: number; height?: number }
 }
+
+export interface QifuNote {
+  id: number
+  title: string
+  pinned: number
+  createdAt: number
+  updatedAt: number
+  preview?: string
+  content?: string
+}
+
+export interface QifuNoteList {
+  notes: QifuNote[]
+  count: number
+}
+
+export function qifuNotesList(query = '') {
+  return request.get<QifuNoteList>({
+    url: `./api.php?action=notes_list&q=${encodeURIComponent(query)}`
+  })
+}
+
+export function qifuNoteGet(id: number) {
+  return request.get<QifuNote>({
+    url: `./api.php?action=note_get&id=${encodeURIComponent(String(id))}`
+  })
+}

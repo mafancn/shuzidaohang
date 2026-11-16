@@ -152,6 +152,12 @@ export const asyncRoutes: AppRouteRecord[] = [
         component: page,
         meta: { title: '友链管理', icon: 'ri:links-line', keepAlive: true }
       },
+      {
+        path: 'notes',
+        name: 'Notepad',
+        component: page,
+        meta: { title: '记事本', icon: 'ri:sticky-note-line', keepAlive: true }
+      },
       legacy(
         'legacy-ads',
         'Ads',

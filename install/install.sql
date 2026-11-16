@@ -285,3 +285,15 @@ PRIMARY KEY (`id`),
 UNIQUE KEY `selector` (`selector`),
 KEY `expires` (`expires`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+DROP TABLE IF EXISTS `web_notes`;
+create table `web_notes` (
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`title` varchar(200) NOT NULL DEFAULT '',
+`content` mediumtext NOT NULL,
+`pinned` tinyint(1) NOT NULL DEFAULT 0,
+`created_at` int(11) NOT NULL DEFAULT 0,
+`updated_at` int(11) NOT NULL DEFAULT 0,
+PRIMARY KEY (`id`),
+KEY `pinned_updated` (`pinned`,`updated_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

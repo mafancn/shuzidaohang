@@ -35,6 +35,8 @@ jobs:
           php tests/admin_system_info_test.php
           php tests/admin_usage_telemetry_test.php
           php tests/ad_image_fit_test.php
+          php tests/notes_test.php
+          php tests/admin_session_restore_test.php
 
   admin-ui:
     name: Admin UI build

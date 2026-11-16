@@ -6,6 +6,7 @@ require_once SYSTEM_ROOT.'update_history.php';
 require_once SYSTEM_ROOT.'online_update.php';
 require_once SYSTEM_ROOT.'backup_service.php';
 require_once SYSTEM_ROOT.'site_stats.php';
+require_once SYSTEM_ROOT.'notes.php';
 
 @header('Content-Type: application/json; charset=UTF-8');
 @header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -713,6 +714,48 @@ if($action === 'link_delete'){
 
 if($action === 'link_save'){
     qifu_api_require_write(); $id=intval(@$_POST['id']); $name=mb_substr(trim((string)@$_POST['name']),0,100); $url=mb_substr(trim((string)@$_POST['url']),0,255); $description=mb_substr(trim((string)@$_POST['description']),0,255); $icon=mb_substr(trim((string)@$_POST['icon']),0,255); if($id<=0 || $name==='' || !filter_var($url,FILTER_VALIDATE_URL)) qifu_api_exit(array(),'友链信息不完整',400); $DB->prepared_query('UPDATE web_links SET name=?,url=?,description=?,icon=? WHERE id=?',array($name,$url,$description,$icon,$id)); writeLog('修改','友链',$id,'Art Design Pro 后台修改友链'); qifu_api_exit(array(),'友链已保存');
+}
+
+if($action === 'notes_list'){
+    qifu_api_exit(qifu_notes_list(isset($_GET['q']) ? (string)$_GET['q'] : ''));
+}
+
+if($action === 'note_get'){
+    $note = qifu_notes_get(isset($_GET['id']) ? intval($_GET['id']) : 0);
+    if(!$note) qifu_api_exit(array(), '笔记不存在', 404);
+    qifu_api_exit($note);
+}
+
+if($action === 'note_save'){
+    qifu_api_require_write();
+    $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    try {
+        $note = qifu_notes_save(
+            $id,
+            isset($_POST['title']) ? (string)$_POST['title'] : '',
+            isset($_POST['content']) ? (string)$_POST['content'] : '',
+            isset($_POST['pinned']) ? intval($_POST['pinned']) : 0
+        );
+        if($id <= 0 && $note) writeLog('添加', '记事本', intval($note['id']), 'Art Design Pro 后台新增笔记');
+        qifu_api_exit($note, '笔记已保存');
+    } catch(Throwable $error) {
+        qifu_api_exit(array(), $error->getMessage(), 400);
+    }
+}
+
+if($action === 'note_delete'){
+    qifu_api_require_write();
+    $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    qifu_notes_delete($id);
+    writeLog('删除', '记事本', $id, 'Art Design Pro 后台删除笔记');
+    qifu_api_exit(array(), '笔记已删除');
+}
+
+if($action === 'note_pin'){
+    qifu_api_require_write();
+    $note = qifu_notes_pin(isset($_POST['id']) ? intval($_POST['id']) : 0, isset($_POST['pinned']) ? intval($_POST['pinned']) : 0);
+    if(!$note) qifu_api_exit(array(), '笔记不存在', 404);
+    qifu_api_exit($note, '置顶状态已更新');
 }
 
 if($action === 'ad_save'){

@@ -16,7 +16,8 @@ function qifu_backup_allowed_tables(){
         'web_links',
         'web_ads',
         'web_ad_stats',
-        'web_login_attempts'
+        'web_login_attempts',
+        'web_notes'
     );
 }
 

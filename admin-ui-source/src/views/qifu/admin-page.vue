@@ -1367,7 +1367,7 @@
       </div>
     </template>
 
-    <template v-else>
+    <template v-else-if="pageName === 'AboutIndex'">
       <PageTitle
         icon="InfoFilled"
         title="检查更新"
@@ -1571,6 +1571,101 @@
         </ElCard>
       </div>
     </template>
+
+    <template v-else-if="pageName === 'Notepad'">
+      <PageTitle icon="Notebook" title="记事本" desc="记录资料、灵感和待办，支持搜索、置顶和自动保存。" />
+      <div class="notepad-shell">
+        <aside class="notepad-sidebar">
+          <div class="notepad-sidebar-head">
+            <ElInput
+              v-model="noteSearch"
+              clearable
+              placeholder="搜索标题或内容"
+              class="notepad-search"
+              @input="scheduleNoteSearch"
+            >
+              <template #prefix><ElIcon><Search /></ElIcon></template>
+            </ElInput>
+            <ElButton type="primary" class="notepad-new-button" @click="newNote">
+              <ElIcon><Plus /></ElIcon>新建
+            </ElButton>
+          </div>
+          <div v-loading="notesLoading" class="notepad-list">
+            <button
+              v-for="note in notes"
+              :key="note.id"
+              type="button"
+              class="notepad-list-item"
+              :class="{ 'is-active': note.id === noteId }"
+              @click="selectNote(note.id)"
+            >
+              <span class="notepad-list-title-row">
+                <b class="notepad-list-title">{{ note.title || '未命名笔记' }}</b>
+                <ElIcon v-if="note.pinned" class="notepad-list-pin"><StarFilled /></ElIcon>
+              </span>
+              <span class="notepad-list-preview">{{ note.preview || '暂无内容' }}</span>
+              <time class="notepad-list-time">{{ formatNoteDate(note.updatedAt) }}</time>
+            </button>
+            <ElEmpty
+              v-if="!notesLoading && !notes.length"
+              :image-size="64"
+              description="还没有笔记，点击“新建”开始记录"
+            />
+          </div>
+        </aside>
+        <section class="notepad-editor">
+          <template v-if="noteId !== null">
+            <div class="notepad-editor-head">
+              <ElInput
+                v-model="noteTitle"
+                maxlength="200"
+                class="notepad-title-input"
+                placeholder="笔记标题（留空自动取第一行）"
+                @input="markNoteDirty"
+              />
+              <div class="notepad-editor-actions">
+                <ElButton
+                  plain
+                  :type="notePinned ? 'warning' : 'default'"
+                  @click="toggleNotePin"
+                >
+                  <ElIcon><StarFilled v-if="notePinned" /><Star v-else /></ElIcon>
+                  {{ notePinned ? '已置顶' : '置顶' }}
+                </ElButton>
+                <ElButton :loading="noteSaving" @click="saveNote(true)">保存</ElButton>
+                <ElButton type="danger" plain :disabled="noteId === 0" @click="deleteNote">
+                  <ElIcon><Delete /></ElIcon>删除
+                </ElButton>
+              </div>
+            </div>
+            <div class="notepad-meta">
+              <span v-if="noteSaving" class="notepad-saving"
+                ><ElIcon class="is-loading"><Loading /></ElIcon>正在保存...</span
+              >
+              <span v-else-if="noteDirty" class="notepad-dirty">有未保存的修改</span>
+              <span v-else-if="noteUpdatedAt">已保存 {{ formatNoteDate(noteUpdatedAt) }}</span>
+              <span v-else>新笔记</span>
+              <span class="notepad-count">{{ noteContent.length }} 字</span>
+            </div>
+            <ElInput
+              v-model="noteContent"
+              type="textarea"
+              resize="none"
+              class="notepad-textarea"
+              :autosize="{ minRows: 20, maxRows: 40 }"
+              placeholder="在这里记录资料、账号备忘、待办事项……"
+              @input="markNoteDirty"
+              @keydown.ctrl.s.prevent="saveNote(true)"
+              @keydown.meta.s.prevent="saveNote(true)"
+            />
+          </template>
+          <div v-else class="notepad-empty">
+            <ElEmpty :image-size="96" description="选择左侧笔记，或新建一条" />
+            <ElButton type="primary" @click="newNote">新建笔记</ElButton>
+          </div>
+        </section>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -1578,6 +1673,8 @@
   import {
     qifuBootstrap,
     qifuCheckUpdates,
+    qifuNoteGet,
+    qifuNotesList,
     qifuProfile,
     qifuSaveProfile,
     qifuSiteStats,
@@ -1586,6 +1683,7 @@
     qifuUpdateProgress,
     qifuUpdateStatus,
     type QifuBootstrap,
+    type QifuNote,
     type QifuProfile,
     type QifuSiteMetric,
     type QifuSiteStatRow,
@@ -1625,6 +1723,8 @@
     Refresh,
     Search,
     Setting,
+    Star,
+    StarFilled,
     Upload,
     View,
     DataAnalysis
@@ -2900,6 +3000,196 @@
     }
   }
 
+  const notes = ref<QifuNote[]>([])
+  const notesLoading = ref(false)
+  const noteSearch = ref('')
+  const noteId = ref<number | null>(null)
+  const noteTitle = ref('')
+  const noteContent = ref('')
+  const notePinned = ref(false)
+  const noteUpdatedAt = ref(0)
+  const noteDirty = ref(false)
+  const noteSaving = ref(false)
+  const noteInitialized = ref(false)
+  let noteSearchTimer: ReturnType<typeof setTimeout> | null = null
+  let noteSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+  function formatNoteDate(timestamp: number) {
+    if (!timestamp) return ''
+    const date = new Date(timestamp * 1000)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+      date.getHours()
+    )}:${pad(date.getMinutes())}`
+  }
+
+  async function loadNotes() {
+    notesLoading.value = true
+    try {
+      const result = await qifuNotesList(noteSearch.value.trim())
+      notes.value = Array.isArray(result.notes) ? result.notes : []
+      if (!noteInitialized.value) {
+        noteInitialized.value = true
+        if (noteId.value === null && notes.value.length) {
+          await loadNote(notes.value[0].id)
+        }
+      }
+    } catch (error: any) {
+      ElMessage.error(error?.message || '笔记加载失败')
+    } finally {
+      notesLoading.value = false
+    }
+  }
+
+  async function loadNote(id: number) {
+    const note = await qifuNoteGet(id)
+    noteId.value = note.id
+    noteTitle.value = note.title || ''
+    noteContent.value = note.content || ''
+    notePinned.value = !!note.pinned
+    noteUpdatedAt.value = note.updatedAt || 0
+    noteDirty.value = false
+  }
+
+  function scheduleNoteSearch() {
+    if (noteSearchTimer) clearTimeout(noteSearchTimer)
+    noteSearchTimer = setTimeout(() => {
+      noteSearchTimer = null
+      void loadNotes()
+    }, 300)
+  }
+
+  function markNoteDirty() {
+    noteDirty.value = true
+    if (noteSaveTimer) clearTimeout(noteSaveTimer)
+    noteSaveTimer = setTimeout(() => {
+      noteSaveTimer = null
+      void saveNote(false)
+    }, 1200)
+  }
+
+  async function saveNote(manual = false) {
+    if (noteSaving.value) return false
+    if (noteTitle.value.trim() === '' && noteContent.value.trim() === '') {
+      if (manual) ElMessage.warning('笔记内容不能为空')
+      return false
+    }
+    noteSaving.value = true
+    try {
+      const saved = await qifuActionOptimized<QifuNote>('note_save', {
+        id: noteId.value || 0,
+        title: noteTitle.value,
+        content: noteContent.value,
+        pinned: notePinned.value ? 1 : 0
+      })
+      if (!saved || !saved.id) throw new Error('保存返回异常')
+      noteId.value = saved.id
+      noteTitle.value = saved.title || noteTitle.value
+      noteUpdatedAt.value = saved.updatedAt || Math.floor(Date.now() / 1000)
+      noteDirty.value = false
+      await loadNotes()
+      if (manual) ElMessage.success('笔记已保存')
+      return true
+    } catch (error: any) {
+      if (manual) ElMessage.error(error?.message || '笔记保存失败')
+      return false
+    } finally {
+      noteSaving.value = false
+    }
+  }
+
+  async function newNote() {
+    if (noteDirty.value) {
+      if (noteTitle.value.trim() === '' && noteContent.value.trim() === '') {
+        noteDirty.value = false
+      } else {
+        const saved = await saveNote(false)
+        if (!saved) return
+      }
+    }
+    noteId.value = 0
+    noteTitle.value = ''
+    noteContent.value = ''
+    notePinned.value = false
+    noteUpdatedAt.value = 0
+    noteDirty.value = false
+  }
+
+  async function selectNote(id: number) {
+    if (noteId.value === id) return
+    if (noteDirty.value) {
+      if (noteTitle.value.trim() === '' && noteContent.value.trim() === '') {
+        noteDirty.value = false
+      } else {
+        const saved = await saveNote(false)
+        if (!saved) return
+      }
+    }
+    try {
+      await loadNote(id)
+    } catch (error: any) {
+      ElMessage.error(error?.message || '笔记打开失败')
+    }
+  }
+
+  async function deleteNote() {
+    if (noteId.value === null) return
+    const deletingId = noteId.value
+    if (deletingId > 0) {
+      try {
+        await ElMessageBox.confirm('删除后无法恢复，确定删除这条笔记吗？', '删除笔记', {
+          type: 'warning',
+          confirmButtonText: '删除',
+          cancelButtonText: '取消'
+        })
+      } catch {
+        return
+      }
+      try {
+        await qifuActionOptimized('note_delete', { id: deletingId })
+        ElMessage.success('笔记已删除')
+      } catch (error: any) {
+        ElMessage.error(error?.message || '笔记删除失败')
+        return
+      }
+    }
+    noteId.value = null
+    noteTitle.value = ''
+    noteContent.value = ''
+    notePinned.value = false
+    noteUpdatedAt.value = 0
+    noteDirty.value = false
+    await loadNotes()
+    if (deletingId > 0 && notes.value.length) {
+      await loadNote(notes.value[0].id).catch(() => undefined)
+    }
+  }
+
+  async function toggleNotePin() {
+    const nextPinned = notePinned.value ? 0 : 1
+    if (noteId.value !== null && noteId.value > 0) {
+      try {
+        const saved = await qifuActionOptimized<QifuNote>('note_pin', {
+          id: noteId.value,
+          pinned: nextPinned
+        })
+        notePinned.value = !!(saved && saved.pinned)
+        await loadNotes()
+      } catch (error: any) {
+        ElMessage.error(error?.message || '置顶操作失败')
+      }
+      return
+    }
+    notePinned.value = !!nextPinned
+    markNoteDirty()
+  }
+
+  function handleNoteBeforeUnload(event: BeforeUnloadEvent) {
+    if (!noteDirty.value) return
+    event.preventDefault()
+    event.returnValue = ''
+  }
+
   onMounted(refresh)
   watch(
     pageName,
@@ -2922,6 +3212,19 @@
     },
     { immediate: true }
   )
+  watch(
+    pageName,
+    (name) => {
+      if (name === 'Notepad') void loadNotes()
+    },
+    { immediate: true }
+  )
+  onMounted(() => window.addEventListener('beforeunload', handleNoteBeforeUnload))
+  onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleNoteBeforeUnload)
+    if (noteSearchTimer) clearTimeout(noteSearchTimer)
+    if (noteSaveTimer) clearTimeout(noteSaveTimer)
+  })
 </script>
 
 <style scoped>
@@ -5675,5 +5978,212 @@
   .desc-color-option.is-checked :deep(.el-radio__label) {
     font-weight: 600;
     color: var(--main-color);
+  }
+
+  .notepad-shell {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: 16px;
+    min-height: calc(100vh - 250px);
+  }
+
+  .notepad-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--art-main-bg-color);
+    border: 1px solid var(--art-border-color);
+    border-radius: 10px;
+  }
+
+  .notepad-sidebar-head {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid var(--art-border-color);
+  }
+
+  .notepad-search {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .notepad-new-button {
+    flex: 0 0 auto;
+  }
+
+  .notepad-list {
+    flex: 1;
+    max-height: calc(100vh - 340px);
+    padding: 8px;
+    overflow-y: auto;
+  }
+
+  .notepad-list-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+    padding: 11px 12px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+  }
+
+  .notepad-list-item:hover {
+    background: var(--el-fill-color-light);
+  }
+
+  .notepad-list-item.is-active {
+    background: var(--el-color-primary-light-9);
+    border-color: var(--el-color-primary-light-7);
+  }
+
+  .notepad-list-title-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .notepad-list-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .notepad-list-pin {
+    flex: 0 0 auto;
+    color: var(--el-color-warning);
+  }
+
+  .notepad-list-preview {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--art-gray-500);
+    word-break: break-word;
+    white-space: pre-wrap;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .notepad-list-time {
+    font-size: 11px;
+    color: var(--art-gray-500);
+  }
+
+  .notepad-editor {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 16px;
+    background: var(--art-main-bg-color);
+    border: 1px solid var(--art-border-color);
+    border-radius: 10px;
+  }
+
+  .notepad-editor-head {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .notepad-title-input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .notepad-title-input :deep(.el-input__wrapper) {
+    padding-left: 0;
+    box-shadow: none;
+  }
+
+  .notepad-title-input :deep(.el-input__inner) {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .notepad-editor-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .notepad-meta {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 0 10px;
+    font-size: 12px;
+    color: var(--art-gray-500);
+    border-bottom: 1px solid var(--art-border-color);
+  }
+
+  .notepad-count {
+    margin-left: auto;
+  }
+
+  .notepad-saving {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .notepad-dirty {
+    color: var(--el-color-warning);
+  }
+
+  .notepad-textarea {
+    flex: 1;
+    margin-top: 12px;
+  }
+
+  .notepad-textarea :deep(.el-textarea__inner) {
+    min-height: 420px !important;
+    padding: 4px 0;
+    font-size: 14px;
+    line-height: 1.75;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .notepad-empty {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    min-height: 420px;
+  }
+
+  @media (max-width: 900px) {
+    .notepad-shell {
+      grid-template-columns: 1fr;
+    }
+
+    .notepad-list {
+      max-height: 220px;
+    }
+
+    .notepad-editor-head {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .notepad-editor-actions {
+      justify-content: flex-end;
+    }
   }
 </style>
