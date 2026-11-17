@@ -1628,6 +1628,13 @@
                   <ElIcon><StarFilled v-if="notePinned" /><Star v-else /></ElIcon>
                   {{ notePinned ? '已置顶' : '置顶' }}
                 </ElButton>
+                <ElButton plain @click="toggleNotePreview">
+                  <ElIcon><Edit v-if="notePreview" /><View v-else /></ElIcon>
+                  {{ notePreview ? '编辑' : '预览' }}
+                </ElButton>
+                <ElButton plain :disabled="!noteContent.trim()" @click="copyNote">
+                  <ElIcon><CopyDocument /></ElIcon>复制
+                </ElButton>
                 <ElButton :loading="noteSaving" @click="saveNote(true)">保存</ElButton>
                 <ElButton type="danger" plain :disabled="noteId === 0" @click="deleteNote">
                   <ElIcon><Delete /></ElIcon>删除
@@ -1643,7 +1650,23 @@
               <span v-else>新笔记</span>
               <span class="notepad-count">{{ noteContent.length }} 字</span>
             </div>
+            <div v-if="notePreview" class="notepad-preview">
+              <template v-if="noteContent.trim()">
+                <template v-for="(part, index) in noteSegments" :key="index">
+                  <a
+                    v-if="part.type === 'link'"
+                    :href="part.href"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{{ part.text }}</a
+                  >
+                  <span v-else>{{ part.text }}</span>
+                </template>
+              </template>
+              <span v-else class="notepad-preview-empty">暂无内容</span>
+            </div>
             <ElInput
+              v-else
               v-model="noteContent"
               type="textarea"
               resize="none"
@@ -1705,6 +1728,7 @@
     Box,
     Check,
     Close,
+    CopyDocument,
     Delete,
     Download,
     Edit,
@@ -3006,9 +3030,75 @@
   const noteUpdatedAt = ref(0)
   const noteDirty = ref(false)
   const noteSaving = ref(false)
+  const notePreview = ref(true)
   const noteInitialized = ref(false)
   let noteSearchTimer: ReturnType<typeof setTimeout> | null = null
   let noteSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+  type NoteSegment = { type: 'text' | 'link'; text: string; href?: string }
+  const noteSegments = computed<NoteSegment[]>(() => {
+    const text = noteContent.value || ''
+    const segments: NoteSegment[] = []
+    const re = /(?:https?:\/\/|www\.)[A-Za-z0-9\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi
+    let last = 0
+    let matched: RegExpExecArray | null
+    const pushText = (value: string) => {
+      if (value) segments.push({ type: 'text', text: value })
+    }
+    while ((matched = re.exec(text)) !== null) {
+      if (matched.index > last) pushText(text.slice(last, matched.index))
+      let url = matched[0]
+      let trailing = ''
+      while (/[.,;:!?，。；：！？、)\]）】》]$/.test(url)) {
+        trailing = url.slice(-1) + trailing
+        url = url.slice(0, -1)
+      }
+      if (url) {
+        segments.push({
+          type: 'link',
+          text: url,
+          href: /^www\./i.test(url) ? `https://${url}` : url
+        })
+        pushText(trailing)
+      } else {
+        pushText(matched[0])
+      }
+      last = matched.index + matched[0].length
+    }
+    if (last < text.length) pushText(text.slice(last))
+    return segments
+  })
+
+  function toggleNotePreview() {
+    notePreview.value = !notePreview.value
+  }
+
+  async function copyNote() {
+    const text = noteContent.value
+    if (!text.trim()) {
+      ElMessage.warning('没有可复制的内容')
+      return
+    }
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        const copied = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        if (!copied) throw new Error('copy failed')
+      }
+      ElMessage.success('已复制')
+    } catch {
+      ElMessage.error('复制失败，请手动选择内容复制')
+    }
+  }
 
   function formatNoteDate(timestamp: number) {
     if (!timestamp) return ''
@@ -3109,6 +3199,7 @@
     notePinned.value = false
     noteUpdatedAt.value = 0
     noteDirty.value = false
+    notePreview.value = false
   }
 
   async function selectNote(id: number) {
@@ -6152,6 +6243,34 @@
     background: transparent;
     border: 0;
     box-shadow: none;
+  }
+
+  .notepad-preview {
+    flex: 1;
+    min-height: 420px;
+    margin-top: 12px;
+    padding: 4px 0;
+    overflow: auto;
+    font-size: 14px;
+    line-height: 1.75;
+    color: inherit;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .notepad-preview a {
+    color: var(--el-color-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-all;
+  }
+
+  .notepad-preview a:hover {
+    color: var(--el-color-primary-light-3);
+  }
+
+  .notepad-preview-empty {
+    color: var(--art-gray-500);
   }
 
   .notepad-empty {
