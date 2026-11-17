@@ -3079,21 +3079,36 @@
       ElMessage.warning('没有可复制的内容')
       return
     }
-    try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text)
-      } else {
-        const textarea = document.createElement('textarea')
-        textarea.value = text
-        textarea.style.position = 'fixed'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.focus()
-        textarea.select()
-        const copied = document.execCommand('copy')
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.setAttribute('readonly', '')
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      let copied = false
+      try {
+        copied = document.execCommand('copy')
+      } finally {
         document.body.removeChild(textarea)
-        if (!copied) throw new Error('copy failed')
       }
+      return copied
+    }
+    try {
+      let copied = false
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text)
+          copied = true
+        } catch {
+          copied = false
+        }
+      }
+      if (!copied) copied = fallbackCopy()
+      if (!copied) throw new Error('copy failed')
       ElMessage.success('已复制')
     } catch {
       ElMessage.error('复制失败，请手动选择内容复制')
