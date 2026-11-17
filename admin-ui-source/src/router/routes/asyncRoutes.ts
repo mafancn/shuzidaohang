@@ -44,6 +44,12 @@ export const asyncRoutes: AppRouteRecord[] = [
         name: 'Console',
         component: page,
         meta: { title: '仪表盘', icon: 'ri:dashboard-3-line', fixedTab: true }
+      },
+      {
+        path: 'notes',
+        name: 'Notepad',
+        component: page,
+        meta: { title: '记事本', icon: 'ri:sticky-note-line', keepAlive: true }
       }
     ]
   },
@@ -151,12 +157,6 @@ export const asyncRoutes: AppRouteRecord[] = [
         name: 'Links',
         component: page,
         meta: { title: '友链管理', icon: 'ri:links-line', keepAlive: true }
-      },
-      {
-        path: 'notes',
-        name: 'Notepad',
-        component: page,
-        meta: { title: '记事本', icon: 'ri:sticky-note-line', keepAlive: true }
       },
       legacy(
         'legacy-ads',
